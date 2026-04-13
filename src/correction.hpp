@@ -1,0 +1,248 @@
+#pragma once
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 3 — Per-Region Correction  (rewrite B)
+//
+// Key design principles:
+//   1. ALL corrections work directly on RGB pixel buffers — no grayscale ratio hack
+//   2. DFT sharpening uses unsharp masking (blend, not replace) — far less destructive
+//   3. Histogram stretching uses percentile clipping (2%–98%) not hard min/max
+//   4. Every correction is blended with the original at a conservative strength
+//   5. Thresholds are tight — only genuinely degraded regions get touched
+// ─────────────────────────────────────────────────────────────────────────────
+#include <vector>
+#include <cstdint>
+#include <cmath>
+#include <algorithm>
+#include <numeric>
+#include "dft.hpp"
+
+// ── RGB region buffer helpers ─────────────────────────────────────────────────
+// Interleaved RGB flat buffer: [R0,G0,B0, R1,G1,B1, ...]
+using RGBBuf = std::vector<uint8_t>;
+
+std::vector<double> extractChannel(const RGBBuf& buf, int ch) {
+    int N = (int)buf.size() / 3;
+    std::vector<double> out(N);
+    for (int i = 0; i < N; ++i) out[i] = buf[i*3 + ch];
+    return out;
+}
+
+void writeChannel(RGBBuf& buf, const std::vector<double>& ch, int idx) {
+    int N = (int)buf.size() / 3;
+    for (int i = 0; i < N; ++i)
+        buf[i*3 + idx] = (uint8_t)std::clamp((int)std::round(ch[i]), 0, 255);
+}
+
+// Blend corrected channel with original at strength (0=no change, 1=full replace)
+std::vector<double> blendCh(const std::vector<double>& orig,
+                             const std::vector<double>& corr,
+                             double strength) {
+    std::vector<double> out(orig.size());
+    for (size_t i = 0; i < orig.size(); ++i)
+        out[i] = std::clamp(orig[i]*(1.0-strength) + corr[i]*strength, 0.0, 255.0);
+    return out;
+}
+
+// ── Histogram statistics ──────────────────────────────────────────────────────
+struct HistStats {
+    double mean, stddev, p2, p98;
+    bool underExposed; // mean < 60  AND p98 < 180
+    bool overExposed;  // mean > 195 AND p2  > 80
+};
+
+HistStats computeHistStats(const RGBBuf& pixels) {
+    int N = (int)pixels.size() / 3;
+    std::vector<double> lums(N);
+    double sum = 0;
+    for (int i = 0; i < N; ++i) {
+        lums[i] = 0.299*pixels[i*3] + 0.587*pixels[i*3+1] + 0.114*pixels[i*3+2];
+        sum += lums[i];
+    }
+    double mean = sum / N;
+    double var = 0;
+    for (double l : lums) var += (l-mean)*(l-mean);
+    double stddev = std::sqrt(var/N);
+    std::vector<double> sorted = lums;
+    std::sort(sorted.begin(), sorted.end());
+    double p2  = sorted[std::max(0, (int)(0.02*N))];
+    double p98 = sorted[std::min(N-1, (int)(0.98*N))];
+    return {mean, stddev, p2, p98,
+            mean < 60.0  && p98 < 180.0,
+            mean > 195.0 && p2  > 80.0};
+}
+
+// ── 3a. Histogram stretch (percentile-clipped, blended) ──────────────────────
+std::vector<double> stretchChPercentile(const std::vector<double>& ch,
+                                         double lo, double hi) {
+    if (hi - lo < 5.0) return ch;
+    std::vector<double> out(ch.size());
+    for (size_t i = 0; i < ch.size(); ++i)
+        out[i] = std::clamp((ch[i]-lo)/(hi-lo)*255.0, 0.0, 255.0);
+    return out;
+}
+
+RGBBuf histogramStretch(const RGBBuf& pixels, double strength = 0.75) {
+    RGBBuf out = pixels;
+    for (int ch = 0; ch < 3; ++ch) {
+        auto orig = extractChannel(pixels, ch);
+        auto sv = orig; std::sort(sv.begin(), sv.end());
+        int N = (int)sv.size();
+        double lo = sv[std::max(0,(int)(0.02*N))];
+        double hi = sv[std::min(N-1,(int)(0.98*N))];
+        auto stretched = stretchChPercentile(orig, lo, hi);
+        writeChannel(out, blendCh(orig, stretched, strength), ch);
+    }
+    return out;
+}
+
+// ── 3b. Unsharp mask sharpening (DFT-based, per channel, blended) ────────────
+// sharp = orig + amount*(orig - blurred)   — never replaces, always adds edge info
+ImageGray channelToGray(const std::vector<double>& ch, int rows, int cols) {
+    ImageGray g; g.rows = rows; g.cols = cols; g.data = ch; return g;
+}
+
+std::vector<double> unsharpChannel(const std::vector<double>& ch, int rows, int cols,
+                                    double blurCutoff = 0.15, double amount = 0.5) {
+    ImageGray img = channelToGray(ch, rows, cols);
+    CMatrix padded  = toCMatrix(img);
+    CMatrix dft     = dft2d(padded, false);
+    CMatrix shifted = fftShift(dft);
+    CMatrix lp      = applyLowPassMask(shifted, blurCutoff);
+    CMatrix back    = ifftShift(lp);
+    CMatrix blurred = dft2d(back, true);
+    ImageGray blurImg = toImageGray(blurred, rows, cols);
+    std::vector<double> out(ch.size());
+    for (size_t i = 0; i < ch.size(); ++i)
+        out[i] = std::clamp(ch[i] + amount*(ch[i] - blurImg.data[i]), 0.0, 255.0);
+    return out;
+}
+
+RGBBuf sharpenRGB(const RGBBuf& pixels, int rows, int cols,
+                   double blurCutoff = 0.15, double amount = 0.5, double strength = 0.5) {
+    RGBBuf out = pixels;
+    for (int ch = 0; ch < 3; ++ch) {
+        auto orig      = extractChannel(pixels, ch);
+        auto sharpened = unsharpChannel(orig, rows, cols, blurCutoff, amount);
+        writeChannel(out, blendCh(orig, sharpened, strength), ch);
+    }
+    return out;
+}
+
+// ── 3c. DFT denoising (low-pass per channel, blended) ────────────────────────
+RGBBuf denoiseRGB(const RGBBuf& pixels, int rows, int cols,
+                   double cutoffRatio = 0.35, double strength = 0.5) {
+    RGBBuf out = pixels;
+    for (int ch = 0; ch < 3; ++ch) {
+        auto orig = extractChannel(pixels, ch);
+        ImageGray img = channelToGray(orig, rows, cols);
+        CMatrix padded  = toCMatrix(img);
+        CMatrix dft     = dft2d(padded, false);
+        CMatrix shifted = fftShift(dft);
+        CMatrix lp      = applyLowPassMask(shifted, cutoffRatio);
+        CMatrix back    = ifftShift(lp);
+        CMatrix recon   = dft2d(back, true);
+        ImageGray denoised = toImageGray(recon, rows, cols);
+        writeChannel(out, blendCh(orig, denoised.data, strength), ch);
+    }
+    return out;
+}
+
+// ── 3d. DCT blockiness removal (per channel, blended) ────────────────────────
+constexpr int BLOCK = 8;
+constexpr double PI_C = 3.14159265358979323846;
+
+void dct1d_8(const double in[BLOCK], double out[BLOCK]) {
+    for (int u = 0; u < BLOCK; ++u) {
+        double cu = (u==0) ? 1.0/std::sqrt(2.0) : 1.0;
+        double sum = 0;
+        for (int x = 0; x < BLOCK; ++x)
+            sum += in[x]*std::cos(PI_C*(2*x+1)*u/(2.0*BLOCK));
+        out[u] = cu*sum*(2.0/BLOCK);
+    }
+}
+
+void idct1d_8(const double in[BLOCK], double out[BLOCK]) {
+    for (int x = 0; x < BLOCK; ++x) {
+        double sum = in[0]/std::sqrt(2.0);
+        for (int u = 1; u < BLOCK; ++u)
+            sum += in[u]*std::cos(PI_C*(2*x+1)*u/(2.0*BLOCK));
+        out[x] = sum;
+    }
+}
+
+void dct2d_8x8(double block[BLOCK][BLOCK]) {
+    double tmp[BLOCK][BLOCK];
+    for (int r = 0; r < BLOCK; ++r) dct1d_8(block[r], tmp[r]);
+    for (int c = 0; c < BLOCK; ++c) {
+        double ci[BLOCK], co[BLOCK];
+        for (int r = 0; r < BLOCK; ++r) ci[r] = tmp[r][c];
+        dct1d_8(ci, co);
+        for (int r = 0; r < BLOCK; ++r) block[r][c] = co[r];
+    }
+}
+
+void idct2d_8x8(double block[BLOCK][BLOCK]) {
+    double tmp[BLOCK][BLOCK];
+    for (int c = 0; c < BLOCK; ++c) {
+        double ci[BLOCK], co[BLOCK];
+        for (int r = 0; r < BLOCK; ++r) ci[r] = block[r][c];
+        idct1d_8(ci, co);
+        for (int r = 0; r < BLOCK; ++r) tmp[r][c] = co[r];
+    }
+    for (int r = 0; r < BLOCK; ++r) idct1d_8(tmp[r], block[r]);
+}
+
+std::vector<double> dctSmoothChannel(const std::vector<double>& ch,
+                                      int rows, int cols, double sf = 0.6) {
+    std::vector<double> out = ch;
+    for (int r = 0; r+BLOCK <= rows; r += BLOCK) {
+        for (int c = 0; c+BLOCK <= cols; c += BLOCK) {
+            double blk[BLOCK][BLOCK];
+            for (int br = 0; br < BLOCK; ++br)
+                for (int bc = 0; bc < BLOCK; ++bc)
+                    blk[br][bc] = ch[(r+br)*cols+(c+bc)] - 128.0;
+            dct2d_8x8(blk);
+            for (int u = 0; u < BLOCK; ++u)
+                for (int v = 0; v < BLOCK; ++v)
+                    if (u+v >= BLOCK) blk[u][v] *= sf;
+            idct2d_8x8(blk);
+            for (int br = 0; br < BLOCK; ++br)
+                for (int bc = 0; bc < BLOCK; ++bc)
+                    out[(r+br)*cols+(c+bc)] = std::clamp(blk[br][bc]+128.0, 0.0, 255.0);
+        }
+    }
+    return out;
+}
+
+RGBBuf removeBlockinessRGB(const RGBBuf& pixels, int rows, int cols,
+                             double sf = 0.6, double strength = 0.6) {
+    RGBBuf out = pixels;
+    for (int ch = 0; ch < 3; ++ch) {
+        auto orig     = extractChannel(pixels, ch);
+        auto smoothed = dctSmoothChannel(orig, rows, cols, sf);
+        writeChannel(out, blendCh(orig, smoothed, strength), ch);
+    }
+    return out;
+}
+
+// ── Diagnosis struct ──────────────────────────────────────────────────────────
+struct RegionDiagnosis {
+    bool   blurry, noisy, underExposed, overExposed, blocky;
+    // Raw scores (for dry-run printing)
+    double blurScore, noiseScore, histMean, histStddev, boundaryDiff;
+};
+
+// ── Main dispatch ─────────────────────────────────────────────────────────────
+RGBBuf correctRegionRGB(const RGBBuf& pixels, int rows, int cols,
+                         const RegionDiagnosis& diag) {
+    RGBBuf result = pixels;
+    if (diag.blocky)
+        result = removeBlockinessRGB(result, rows, cols, 0.6, 0.6);
+    if (diag.noisy)
+        result = denoiseRGB(result, rows, cols, 0.35, 0.5);
+    else if (diag.blurry)
+        result = sharpenRGB(result, rows, cols, 0.15, 0.5, 0.5);
+    if (diag.underExposed || diag.overExposed)
+        result = histogramStretch(result, 0.75);
+    return result;
+}
