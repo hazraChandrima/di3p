@@ -1,10 +1,18 @@
 #pragma once
 // ─────────────────────────────────────────────────────────────────────────────
-// Stage 1 — DFT / IDFT from scratch
-//   • 1D DFT (O(N²)), applied row-wise then column-wise for 2D
-//   • Zero-pads input to next power-of-2 for better spectral resolution
-//   • Outputs magnitude spectrum, blur score, noise score
-//   • Applies spectral mask (low-pass or high-pass) and reconstructs via IDFT
+// Stage 1 — FFT / IFFT from scratch  (Cooley-Tukey radix-2 DIT)
+//
+// Replaces the O(N²) naive DFT with O(N log N) FFT.
+// Everything else (2D decomposition, shift, masks, scores) is unchanged.
+//
+// Speedup on a 256-point signal: 256² = 65536 ops  →  256×8 = 2048 ops  (32×)
+// On a full 512×512 region:     O(N²) ≈ 68 billion  →  O(N logN) ≈ 2.4 million
+//
+// Algorithm: Cooley-Tukey in-place radix-2 DIT (decimation-in-time)
+//   1. Bit-reverse permutation
+//   2. Butterfly passes: log2(N) stages, N/2 butterflies per stage
+//   Twiddle factors: W_N^k = e^(−j·2π·k/N)  (forward)
+//                             e^(+j·2π·k/N)  (inverse, then divide by N)
 // ─────────────────────────────────────────────────────────────────────────────
 #include <vector>
 #include <complex>
@@ -14,51 +22,94 @@
 #include <algorithm>
 #include <numeric>
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb_image_write.h"
-
-using Complex   = std::complex<double>;
-using CRow      = std::vector<Complex>;
-using CMatrix   = std::vector<CRow>;
+using Complex    = std::complex<double>;
+using CRow       = std::vector<Complex>;
+using CMatrix    = std::vector<CRow>;
 using RealMatrix = std::vector<std::vector<double>>;
 
 constexpr double PI = 3.14159265358979323846;
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── helpers ───────────────────────────────────────────────────────────────────
 
-// Next power of 2 >= n
 inline int nextPow2(int n) {
     int p = 1;
     while (p < n) p <<= 1;
     return p;
 }
 
-// RGB → grayscale  (ITU-R BT.601)
 inline double toGray(uint8_t r, uint8_t g, uint8_t b) {
     return 0.299 * r + 0.587 * g + 0.114 * b;
 }
 
-// ── 1-D DFT ──────────────────────────────────────────────────────────────────
-// forward: X[k] = Σ x[n] · e^(−j·2π·k·n/N)
-// inverse: x[n] = (1/N) Σ X[k] · e^(+j·2π·k·n/N)
-CRow dft1d(const CRow& x, bool inverse = false) {
+// ── Bit-reverse permutation ───────────────────────────────────────────────────
+// Reorders x so that x[i] moves to x[bitrev(i, log2(N))].
+// Required before the butterfly passes so butterflies access contiguous pairs.
+void bitReversePermute(CRow& x) {
     int N = (int)x.size();
-    CRow X(N, {0.0, 0.0});
-    double sign = inverse ? +1.0 : -1.0;
-    for (int k = 0; k < N; ++k) {
-        for (int n = 0; n < N; ++n) {
-            double angle = sign * 2.0 * PI * k * n / N;
-            X[k] += x[n] * Complex(std::cos(angle), std::sin(angle));
-        }
-        if (inverse) X[k] /= N;
+    int bits = 0;
+    while ((1 << bits) < N) ++bits;
+
+    for (int i = 0; i < N; ++i) {
+        // Compute bit-reverse of i
+        int rev = 0;
+        for (int b = 0; b < bits; ++b)
+            if (i & (1 << b)) rev |= (1 << (bits - 1 - b));
+        if (i < rev) std::swap(x[i], x[rev]);
     }
-    return X;
 }
 
-// ── 2-D DFT via row-column decomposition ─────────────────────────────────────
+// ── 1-D Cooley-Tukey radix-2 FFT (in-place) ─────────────────────────────────
+// forward=true  → X[k] = Σ x[n] e^(−j2πkn/N)
+// forward=false → x[n] = (1/N) Σ X[k] e^(+j2πkn/N)
+// N must be a power of 2.
+void fft1d_inplace(CRow& x, bool forward) {
+    int N = (int)x.size();
+
+    // Bit-reverse permutation
+    bitReversePermute(x);
+
+    // Butterfly passes — log2(N) stages
+    for (int len = 2; len <= N; len <<= 1) {
+        // Twiddle factor for this stage: W = e^(±j·2π/len)
+        double angle = (forward ? -1.0 : +1.0) * 2.0 * PI / len;
+        Complex W(std::cos(angle), std::sin(angle));
+
+        // Process each group of `len` elements
+        for (int i = 0; i < N; i += len) {
+            Complex w(1.0, 0.0); // current twiddle, starts at W^0 = 1
+            for (int j = 0; j < len / 2; ++j) {
+                // Butterfly:
+                //   even = x[i+j]        + w * x[i+j+len/2]
+                //   odd  = x[i+j]        − w * x[i+j+len/2]
+                Complex u = x[i + j];
+                Complex t = w * x[i + j + len/2];
+                x[i + j]          = u + t;
+                x[i + j + len/2]  = u - t;
+                w *= W;  // advance twiddle: W^(j+1) = W^j * W
+            }
+        }
+    }
+
+    // Inverse: divide by N
+    if (!forward) {
+        for (auto& v : x) v /= double(N);
+    }
+}
+
+// Public wrapper — same signature as old dft1d for drop-in replacement
+CRow dft1d(const CRow& x, bool inverse = false) {
+    CRow y = x;
+    // Pad to power of 2 if needed (shouldn't happen in practice since
+    // toCMatrix already pads, but defensive)
+    int N = (int)y.size();
+    int P = nextPow2(N);
+    if (P != N) y.resize(P, {0.0, 0.0});
+    fft1d_inplace(y, !inverse);
+    return y;
+}
+
+// ── 2-D FFT via row-column decomposition ─────────────────────────────────────
+// Identical logic to before — just calls the O(N log N) fft1d now
 CMatrix dft2d(const CMatrix& in, bool inverse = false) {
     int rows = (int)in.size();
     int cols = (int)in[0].size();
@@ -68,7 +119,7 @@ CMatrix dft2d(const CMatrix& in, bool inverse = false) {
     for (int r = 0; r < rows; ++r)
         out[r] = dft1d(in[r], inverse);
 
-    // Transform each column of the row-transformed result
+    // Transform each column
     for (int c = 0; c < cols; ++c) {
         CRow col(rows);
         for (int r = 0; r < rows; ++r) col[r] = out[r][c];
@@ -78,10 +129,9 @@ CMatrix dft2d(const CMatrix& in, bool inverse = false) {
     return out;
 }
 
-// ── FFT shift: move DC component to centre ───────────────────────────────────
+// ── FFT shift ─────────────────────────────────────────────────────────────────
 CMatrix fftShift(const CMatrix& in) {
-    int rows = (int)in.size();
-    int cols = (int)in[0].size();
+    int rows = (int)in.size(), cols = (int)in[0].size();
     CMatrix out(rows, CRow(cols));
     int hr = rows / 2, hc = cols / 2;
     for (int r = 0; r < rows; ++r)
@@ -90,12 +140,12 @@ CMatrix fftShift(const CMatrix& in) {
     return out;
 }
 
-CMatrix ifftShift(const CMatrix& in) { return fftShift(in); } // shift is its own inverse
+CMatrix ifftShift(const CMatrix& in) { return fftShift(in); }
 
-// ── Build padded complex matrix from grayscale image ─────────────────────────
+// ── ImageGray ─────────────────────────────────────────────────────────────────
 struct ImageGray {
     int rows, cols;
-    std::vector<double> data; // row-major, values [0,255]
+    std::vector<double> data; // row-major, [0,255]
     double& at(int r, int c)       { return data[r * cols + c]; }
     double  at(int r, int c) const { return data[r * cols + c]; }
 };
@@ -110,11 +160,9 @@ CMatrix toCMatrix(const ImageGray& img) {
     return m;
 }
 
-// Extract real part back to image (crop to original size, re-scale to [0,255])
 ImageGray toImageGray(const CMatrix& m, int origRows, int origCols) {
     ImageGray img;
-    img.rows = origRows;
-    img.cols = origCols;
+    img.rows = origRows; img.cols = origCols;
     img.data.resize(origRows * origCols);
     double minV = 1e18, maxV = -1e18;
     for (int r = 0; r < origRows; ++r)
@@ -130,7 +178,7 @@ ImageGray toImageGray(const CMatrix& m, int origRows, int origCols) {
     return img;
 }
 
-// ── Magnitude spectrum (log-scaled for display) ───────────────────────────────
+// ── Magnitude spectrum ────────────────────────────────────────────────────────
 RealMatrix magnitudeSpectrum(const CMatrix& dft) {
     int rows = (int)dft.size(), cols = (int)dft[0].size();
     RealMatrix mag(rows, std::vector<double>(cols));
@@ -142,8 +190,8 @@ RealMatrix magnitudeSpectrum(const CMatrix& dft) {
 
 // ── Diagnosis scores ──────────────────────────────────────────────────────────
 struct DFTScores {
-    double blurScore;   // highFreqEnergy / totalEnergy  — low = blurry
-    double noiseScore;  // variance of |F(u,v)| in high-freq ring — low = noise
+    double blurScore;   // highFreqEnergy / totalEnergy — low = blurry
+    double noiseScore;  // variance of high-freq magnitudes — low = uniform noise
 };
 
 DFTScores computeScores(const CMatrix& shifted, double cutoffRatio = 0.3) {
@@ -154,12 +202,13 @@ DFTScores computeScores(const CMatrix& shifted, double cutoffRatio = 0.3) {
 
     double totalEnergy = 0, highEnergy = 0;
     std::vector<double> highMags;
+    highMags.reserve(rows * cols / 2);
 
     for (int r = 0; r < rows; ++r) {
         for (int c = 0; c < cols; ++c) {
-            double mag2 = std::norm(shifted[r][c]); // |.|^2
+            double mag2 = std::norm(shifted[r][c]);
             totalEnergy += mag2;
-            double dist = std::sqrt((double)((r - cr) * (r - cr) + (c - cc) * (c - cc)));
+            double dist = std::sqrt((double)((r-cr)*(r-cr) + (c-cc)*(c-cc)));
             if (dist > cutoff) {
                 highEnergy += mag2;
                 highMags.push_back(std::sqrt(mag2));
@@ -169,7 +218,6 @@ DFTScores computeScores(const CMatrix& shifted, double cutoffRatio = 0.3) {
 
     double blurScore = (totalEnergy < 1e-12) ? 0.0 : highEnergy / totalEnergy;
 
-    // Variance of high-freq magnitudes
     double mean = 0;
     for (double v : highMags) mean += v;
     mean /= std::max((int)highMags.size(), 1);
@@ -180,77 +228,60 @@ DFTScores computeScores(const CMatrix& shifted, double cutoffRatio = 0.3) {
     return {blurScore, var};
 }
 
-// ── Spectral masks ─────────────────────────────────────────────────────────────
-// Low-pass: keep frequencies inside cutoff  (denoising)
-// High-pass: boost frequencies outside cutoff  (sharpening)
-
+// ── Spectral masks ────────────────────────────────────────────────────────────
 CMatrix applyLowPassMask(const CMatrix& shifted, double cutoffRatio = 0.3) {
     int rows = (int)shifted.size(), cols = (int)shifted[0].size();
     int cr = rows / 2, cc = cols / 2;
-    double maxR = std::sqrt((double)(cr * cr + cc * cc));
-    double cutoff = cutoffRatio * maxR;
+    double cutoff = cutoffRatio * std::sqrt((double)(cr*cr + cc*cc));
     CMatrix out = shifted;
     for (int r = 0; r < rows; ++r)
         for (int c = 0; c < cols; ++c) {
-            double d = std::sqrt((double)((r - cr) * (r - cr) + (c - cc) * (c - cc)));
+            double d = std::sqrt((double)((r-cr)*(r-cr) + (c-cc)*(c-cc)));
             if (d > cutoff) out[r][c] = {0.0, 0.0};
         }
     return out;
 }
 
-CMatrix applyHighBoostMask(const CMatrix& shifted, double cutoffRatio = 0.3,
-                            double boostFactor = 1.8) {
+CMatrix applyHighBoostMask(const CMatrix& shifted,
+                            double cutoffRatio = 0.3, double boostFactor = 1.8) {
     int rows = (int)shifted.size(), cols = (int)shifted[0].size();
     int cr = rows / 2, cc = cols / 2;
-    double maxR = std::sqrt((double)(cr * cr + cc * cc));
-    double cutoff = cutoffRatio * maxR;
+    double cutoff = cutoffRatio * std::sqrt((double)(cr*cr + cc*cc));
     CMatrix out = shifted;
     for (int r = 0; r < rows; ++r)
         for (int c = 0; c < cols; ++c) {
-            double d = std::sqrt((double)((r - cr) * (r - cr) + (c - cc) * (c - cc)));
+            double d = std::sqrt((double)((r-cr)*(r-cr) + (c-cc)*(c-cc)));
             if (d > cutoff) out[r][c] *= boostFactor;
         }
     return out;
 }
 
-// ── Full pipeline: image → DFT → diagnose → mask → IDFT → image ─────────────
-
+// ── Full pipeline ─────────────────────────────────────────────────────────────
 enum class DFTMode { DENOISE, SHARPEN, DIAGNOSE_ONLY };
 
 struct DFTResult {
     ImageGray processed;
     DFTScores scores;
-    bool      isBlurry;   // blurScore < blurThreshold
-    bool      isNoisy;    // noiseScore < noiseThreshold
+    bool      isBlurry;
+    bool      isNoisy;
 };
 
 DFTResult processDFT(const ImageGray& img,
-                     DFTMode mode           = DFTMode::DIAGNOSE_ONLY,
-                     double cutoffRatio     = 0.3,
-                     double boostFactor     = 1.8,
-                     double blurThreshold   = 0.05,
-                     double noiseThreshold  = 0.01) {
-    // Build padded complex matrix
-    CMatrix padded = toCMatrix(img);
+                     DFTMode mode          = DFTMode::DIAGNOSE_ONLY,
+                     double cutoffRatio    = 0.3,
+                     double boostFactor    = 1.8,
+                     double blurThreshold  = 0.05,
+                     double noiseThreshold = 0.01) {
+    CMatrix padded       = toCMatrix(img);
+    CMatrix spectrum     = dft2d(padded, false);
+    CMatrix shifted      = fftShift(spectrum);
+    DFTScores scores     = computeScores(shifted, cutoffRatio);
 
-    // Forward 2D DFT
-    CMatrix dft = dft2d(padded, false);
-
-    // Shift DC to centre
-    CMatrix shifted = fftShift(dft);
-
-    // Compute diagnosis scores
-    DFTScores scores = computeScores(shifted, cutoffRatio);
-
-    // Apply spectral mask based on mode
     CMatrix masked = shifted;
-    if (mode == DFTMode::DENOISE)
-        masked = applyLowPassMask(shifted, cutoffRatio);
-    else if (mode == DFTMode::SHARPEN)
-        masked = applyHighBoostMask(shifted, cutoffRatio, boostFactor);
+    if      (mode == DFTMode::DENOISE) masked = applyLowPassMask(shifted, cutoffRatio);
+    else if (mode == DFTMode::SHARPEN) masked = applyHighBoostMask(shifted, cutoffRatio, boostFactor);
 
-    // Shift back, inverse DFT
-    CMatrix unshifted = ifftShift(masked);
+    CMatrix unshifted    = ifftShift(masked);
     CMatrix reconstructed = dft2d(unshifted, true);
 
     return {

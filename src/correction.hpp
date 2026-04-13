@@ -81,19 +81,52 @@ std::vector<double> stretchChPercentile(const std::vector<double>& ch,
     return out;
 }
 
-RGBBuf histogramStretch(const RGBBuf& pixels, double strength = 0.75) {
-    RGBBuf out = pixels;
-    for (int ch = 0; ch < 3; ++ch) {
-        auto orig = extractChannel(pixels, ch);
-        auto sv = orig; std::sort(sv.begin(), sv.end());
-        int N = (int)sv.size();
-        double lo = sv[std::max(0,(int)(0.02*N))];
-        double hi = sv[std::min(N-1,(int)(0.98*N))];
-        auto stretched = stretchChPercentile(orig, lo, hi);
-        writeChannel(out, blendCh(orig, stretched, strength), ch);
+
+RGBBuf histogramStretchLAB(const RGBBuf& pixels, double strength = 0.9) {
+    int N = (int)pixels.size() / 3;
+
+    // Convert to float YCbCr — stretch Y only, preserve colour
+    std::vector<double> Y(N), Cb(N), Cr(N);
+    for (int i = 0; i < N; ++i) {
+        double r = pixels[i*3], g = pixels[i*3+1], b = pixels[i*3+2];
+        Y[i]  =  0.299*r + 0.587*g + 0.114*b;
+        Cb[i] = -0.168736*r - 0.331264*g + 0.5*b + 128.0;
+        Cr[i] =  0.5*r - 0.418688*g - 0.081312*b + 128.0;
+    }
+
+    // Percentile clip — tighter: 1%–99% so blurry compressed histograms still stretch
+    auto sv = Y; std::sort(sv.begin(), sv.end());
+    double lo = sv[std::max(0, (int)(0.01*N))];
+    double hi = sv[std::min(N-1, (int)(0.99*N))];
+
+    // Force minimum stretch range — if histogram is compressed, push it open
+    if (hi - lo < 30.0) {
+        double mid = (hi + lo) / 2.0;
+        lo = std::max(0.0,   mid - 60.0);
+        hi = std::min(255.0, mid + 60.0);
+    }
+
+    // Stretch Y
+    std::vector<double> Ys(N);
+    for (int i = 0; i < N; ++i)
+        Ys[i] = std::clamp((Y[i] - lo) / (hi - lo) * 255.0, 0.0, 255.0);
+
+    // Blend
+    std::vector<double> Yb(N);
+    for (int i = 0; i < N; ++i)
+        Yb[i] = Y[i]*(1.0 - strength) + Ys[i]*strength;
+
+    // Convert back to RGB
+    RGBBuf out(pixels.size());
+    for (int i = 0; i < N; ++i) {
+        double y = Yb[i], cb = Cb[i] - 128.0, cr = Cr[i] - 128.0;
+        out[i*3]   = (uint8_t)std::clamp(y + 1.402*cr,               0.0, 255.0);
+        out[i*3+1] = (uint8_t)std::clamp(y - 0.344136*cb - 0.714136*cr, 0.0, 255.0);
+        out[i*3+2] = (uint8_t)std::clamp(y + 1.772*cb,               0.0, 255.0);
     }
     return out;
 }
+
 
 // ── 3b. Unsharp mask sharpening (DFT-based, per channel, blended) ────────────
 // sharp = orig + amount*(orig - blurred)   — never replaces, always adds edge info
@@ -242,7 +275,8 @@ RGBBuf correctRegionRGB(const RGBBuf& pixels, int rows, int cols,
         result = denoiseRGB(result, rows, cols, 0.35, 0.5);
     else if (diag.blurry)
         result = sharpenRGB(result, rows, cols, 0.15, 0.5, 0.5);
+    // Only stretch if actually under/over exposed — not just because it's blurry
     if (diag.underExposed || diag.overExposed)
-        result = histogramStretch(result, 0.75);
+        result = histogramStretchLAB(result, 0.9);
     return result;
 }
