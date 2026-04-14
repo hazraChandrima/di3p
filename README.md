@@ -22,7 +22,7 @@ Inside the `build/` directory:
 
 ---
 
-## Sample Results
+## Results
 
 ### Input Image
 
@@ -30,11 +30,8 @@ Inside the `build/` directory:
   <img src="./images/test1/flower.jpeg" alt="Input Image" width="400"/>
 </p>
 
----
 
-## Results
-
-| K | Segmentation | Enhanced Output | Evaluation Metrics |
+| K | Segmentation | Output Image | Evaluation Metrics |
 |:-:|:---:|:---:|:---:|
 | **4** | <img src="./images/test1/output/k4/k4.jpg" width="200"/> | <img src="./images/test1/output/k4/enhanced-k4.jpg" width="200"/> | <img src="./images/test1/output/k4/eval.png" width="200"/> |
 | **6** | <img src="./images/test1/output/k6/k6.jpg" width="200"/> | <img src="./images/test1/output/k6/enhanced-k6.jpg" width="200"/> | <img src="./images/test1/output/k6/eval.png" width="200"/> |
