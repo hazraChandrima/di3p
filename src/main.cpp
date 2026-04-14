@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cmath>
 #include <algorithm>
+#include <filesystem>
 
 #include "src/dft.hpp"
 #include "src/kmeans.hpp"
@@ -15,6 +16,8 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
+
+namespace fs = std::filesystem;
 
 struct Image {
     int rows = 0, cols = 0;
@@ -65,7 +68,6 @@ ImageGray toGrayImage(const Image& img) {
     return g;
 }
 
-// Segmentation visualiser
 Image visualiseSegmentation(const Image& img, const KMeansResult& seg) {
     const std::vector<PixelRGB> pal = {
         {100,200,220},{240,180,100},{180,230,130},{230,140,160},{150,150,240},{200,200,100}
@@ -81,7 +83,6 @@ Image visualiseSegmentation(const Image& img, const KMeansResult& seg) {
     return vis;
 }
 
-// Bounding box of a region
 struct BBox { int rMin, rMax, cMin, cMax; };
 
 BBox boundingBox(const std::vector<int>& indices, int cols) {
@@ -94,13 +95,10 @@ BBox boundingBox(const std::vector<int>& indices, int cols) {
     return bb;
 }
 
-// Extract bounding-box RGB patch as a contiguous rows×cols RGB buffer
-// Non-region pixels within the bbox are filled with region's mean colour
 RGBBuf extractBBoxRGB(const Image& img, const BBox& bb,
                        const std::vector<int>& indices) {
     int rows = bb.rMax - bb.rMin + 1;
     int cols = bb.cMax - bb.cMin + 1;
-    // Fill with grey (128) as neutral background
     RGBBuf buf(rows * cols * 3, 128);
     for (int idx : indices) {
         int r = idx / img.cols - bb.rMin;
@@ -113,7 +111,6 @@ RGBBuf extractBBoxRGB(const Image& img, const BBox& bb,
     return buf;
 }
 
-// Write corrected bbox patch back — only at region pixel positions
 void writeBBoxRGB(Image& img, const RGBBuf& buf, const BBox& bb,
                    const std::vector<int>& indices) {
     int cols = bb.cMax - bb.cMin + 1;
@@ -127,12 +124,8 @@ void writeBBoxRGB(Image& img, const RGBBuf& buf, const BBox& bb,
     }
 }
 
-
 RegionDiagnosis diagnoseRegion(const RGBBuf& regionBuf, int rows, int cols,
                                 bool runDCT) {
-    // DFT diagnosis on luminance channel
-    auto lumCh = extractChannel(regionBuf, 0); // approx with R; full lum below
-    // Recompute proper lum
     int N = rows * cols;
     std::vector<double> lum(N);
     for (int i = 0; i < N; ++i)
@@ -141,41 +134,30 @@ RegionDiagnosis diagnoseRegion(const RGBBuf& regionBuf, int rows, int cols,
     ImageGray grayRegion = channelToGray(lum, rows, cols);
     DFTResult dftRes = processDFT(grayRegion, DFTMode::DIAGNOSE_ONLY);
 
-    // Histogram diagnosis
     HistStats hist = computeHistStats(regionBuf);
 
-    // DCT blockiness: average absolute difference across 8-px block boundaries
     double boundaryDiff = 0;
     int count = 0;
     if (runDCT && rows >= BLOCK && cols >= BLOCK) {
-        for (int r = BLOCK-1; r+1 < rows; r += BLOCK) {
+        for (int r = BLOCK-1; r+1 < rows; r += BLOCK)
             for (int c = 0; c < cols; ++c) {
-                double diff = std::abs(lum[r*cols+c] - lum[(r+1)*cols+c]);
-                boundaryDiff += diff;
+                boundaryDiff += std::abs(lum[r*cols+c] - lum[(r+1)*cols+c]);
                 ++count;
             }
-        }
-        for (int c = BLOCK-1; c+1 < cols; c += BLOCK) {
+        for (int c = BLOCK-1; c+1 < cols; c += BLOCK)
             for (int r = 0; r < rows; ++r) {
-                double diff = std::abs(lum[r*cols+c] - lum[r*cols+(c+1)]);
-                boundaryDiff += diff;
+                boundaryDiff += std::abs(lum[r*cols+c] - lum[r*cols+(c+1)]);
                 ++count;
             }
-        }
         if (count > 0) boundaryDiff /= count;
     }
 
     return {
-        dftRes.isBlurry,
-        dftRes.isNoisy,
-        hist.underExposed,
-        hist.overExposed,
+        dftRes.isBlurry, dftRes.isNoisy,
+        hist.underExposed, hist.overExposed,
         runDCT && boundaryDiff > 18.0,
-        dftRes.scores.blurScore,
-        dftRes.scores.noiseScore,
-        hist.mean,
-        hist.stddev,
-        boundaryDiff
+        dftRes.scores.blurScore, dftRes.scores.noiseScore,
+        hist.mean, hist.stddev, boundaryDiff
     };
 }
 
@@ -186,29 +168,56 @@ void printDryRunReport(int k, int regionSize, const BBox& bb,
               << "  (" << regionSize << " px)"
               << "  bbox [" << bb.rMin << "," << bb.rMax
               << "]×["        << bb.cMin << "," << bb.cMax << "]\n";
-    std::cout << "    blurScore   = " << d.blurScore
+    std::cout << "    blurScore    = " << d.blurScore
               << "  → " << (d.blurry       ? "BLURRY"   : "ok") << "\n";
-    std::cout << "    noiseScore  = " << d.noiseScore
+    std::cout << "    noiseScore   = " << d.noiseScore
               << "  → " << (d.noisy        ? "NOISY"    : "ok") << "\n";
-    std::cout << "    histMean    = " << d.histMean
+    std::cout << "    histMean     = " << d.histMean
               << "  → " << (d.underExposed ? "UNDEREXP" :
                              d.overExposed  ? "OVEREXP"  : "ok") << "\n";
-    std::cout << "    boundaryDiff= " << d.boundaryDiff
+    std::cout << "    boundaryDiff = " << d.boundaryDiff
               << "  → " << (d.blocky       ? "BLOCKY"   : "ok") << "\n\n";
 }
 
+// ── Output directory setup ────────────────────────────────────────────────────
+// Resolves ../images/<destName>/output/ relative to the build directory,
+// warns if it already exists, and creates it (including parents) if not.
+// Returns the resolved path with trailing slash.
+std::string setupOutputDir(const std::string& destName) {
+    fs::path outDir = fs::path("..") / "images" / destName / "output";
+
+    if (fs::exists(outDir)) {
+        std::cout << "WARNING: output directory already exists: "
+                  << fs::canonical(outDir).string() << "\n"
+                  << "         Existing files may be overwritten.\n\n";
+    } else {
+        fs::create_directories(outDir);
+        std::cout << "Created output directory: "
+                  << fs::weakly_canonical(outDir).string() << "\n\n";
+    }
+
+    return (outDir / "").string(); // trailing separator
+}
+
+// ── main ──────────────────────────────────────────────────────────────────────
 int main(int argc, char* argv[]) {
-    if (argc < 2) {
-        std::cerr << "Usage: ./analyzer input.jpg [K=4] [--nodct] [--dryrun]\n";
+    if (argc < 3) {
+        std::cerr << "Usage: ./analyzer <source_image> <dest_dirname> [K=4] [--nodct] [--dryrun]\n";
+        std::cerr << "  source_image  path to input image\n";
+        std::cerr << "  dest_dirname  name of output folder (written to ../images/<name>/output/)\n";
+        std::cerr << "  K             number of segments (default 4)\n";
+        std::cerr << "  --nodct       skip DCT blockiness detection\n";
+        std::cerr << "  --dryrun      diagnose only, write nothing\n";
         return 1;
     }
 
     std::string inputPath = argv[1];
-    int  K       = 4;
-    bool runDCT  = true;
-    bool dryRun  = false;
+    std::string destName  = argv[2];
+    int  K      = 4;
+    bool runDCT = true;
+    bool dryRun = false;
 
-    for (int i = 2; i < argc; ++i) {
+    for (int i = 3; i < argc; ++i) {
         std::string a = argv[i];
         if      (a == "--nodct")  runDCT = false;
         else if (a == "--dryrun") dryRun = true;
@@ -217,26 +226,32 @@ int main(int argc, char* argv[]) {
 
     std::cout << "══════════════════════════════════════════════\n";
     std::cout << "  Image Quality Analyzer\n";
-    std::cout << "  Input : " << inputPath << "\n";
+    std::cout << "  Input  : " << inputPath << "\n";
+    std::cout << "  Output : ../images/" << destName << "/output/\n";
     std::cout << "  K=" << K << "  DCT=" << (runDCT?"yes":"no")
-              << "  mode=" << (dryRun?"DRY-RUN (no pixels changed)":"ENHANCE") << "\n";
+              << "  mode=" << (dryRun?"DRY-RUN":"ENHANCE") << "\n";
     std::cout << "══════════════════════════════════════════════\n\n";
 
+    // Resolve and validate output directory (skip in dry-run — nothing is written)
+    std::string outDir;
+    if (!dryRun) outDir = setupOutputDir(destName);
+
+    // Load image
     Image img = loadImage(inputPath);
-    Image enhanced = img;  // will be modified only if !dryRun
+    Image enhanced = img;
     std::cout << "Image: " << img.rows << "×" << img.cols << " px\n\n";
 
     // Stage 2: K-Means
     std::cout << "[ Stage 2 ] K-Means segmentation (K=" << K << ")...\n";
     KMeansResult seg = kmeansSegment(img.pixels, img.rows, img.cols, K);
     if (!dryRun) {
-        Image segVis = visualiseSegmentation(img, seg);
-        saveImage(segVis, "../images/test2/output/k" + std::to_string(K) + ".jpg");
-        std::cout << "  Saved: k" << K << ".jpg\n";
+        std::string segPath = outDir + "k" + std::to_string(K) + ".jpg";
+        saveImage(visualiseSegmentation(img, seg), segPath);
+        std::cout << "  Saved: " << segPath << "\n";
     }
     std::cout << "\n";
 
-    // Stage 1 + 3 + 4 per region
+    // Stages 1 + 3 + 4 per region
     ImageGray grayOrig = toGrayImage(img);
     std::vector<double> wholeOrig(grayOrig.data.begin(), grayOrig.data.end());
 
@@ -247,15 +262,11 @@ int main(int argc, char* argv[]) {
         std::vector<int> indices = regionIndices(seg, k);
         if (indices.empty()) continue;
 
-        // Bounding box
         BBox bb = boundingBox(indices, img.cols);
         int bbRows = bb.rMax - bb.rMin + 1;
         int bbCols = bb.cMax - bb.cMin + 1;
 
-        // Extract bounding-box RGB patch
         RGBBuf regionBuf = extractBBoxRGB(img, bb, indices);
-
-        // Stage 1: diagnose
         RegionDiagnosis diag = diagnoseRegion(regionBuf, bbRows, bbCols, runDCT);
 
         if (dryRun) {
@@ -275,7 +286,6 @@ int main(int argc, char* argv[]) {
             std::cout << " Clean";
         std::cout << "\n";
 
-        // Stage 3: correct (only if something was detected)
         bool needsWork = diag.blurry || diag.noisy ||
                          diag.underExposed || diag.overExposed || diag.blocky;
         if (needsWork) {
@@ -286,11 +296,10 @@ int main(int argc, char* argv[]) {
         // Stage 4: evaluate
         ImageGray grayEnh = toGrayImage(enhanced);
         int regionSize = (int)indices.size();
-        std::vector<double> rOrig(regionSize), rBefore(regionSize), rAfter(regionSize);
+        std::vector<double> rOrig(regionSize), rAfter(regionSize);
         for (int j = 0; j < regionSize; ++j) {
-            rOrig[j]   = grayOrig.data[indices[j]];
-            rBefore[j] = grayOrig.data[indices[j]];   // before = original (no separate degraded)
-            rAfter[j]  = grayEnh.data[indices[j]];
+            rOrig[j]  = grayOrig.data[indices[j]];
+            rAfter[j] = grayEnh.data[indices[j]];
         }
 
         std::string diagStr;
@@ -301,7 +310,7 @@ int main(int argc, char* argv[]) {
         if (diag.blocky)       diagStr += "BLOCKY ";
         if (diagStr.empty())   diagStr = "Clean";
 
-        RegionMetrics m = evaluateRegion(rOrig, rBefore, rAfter);
+        RegionMetrics m = evaluateRegion(rOrig, rOrig, rAfter);
         std::cout << formatReport(k, diagStr, m);
     }
 
@@ -311,8 +320,9 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    saveImage(enhanced, "../images/test2/output/enhanced-k" + std::to_string(K) + ".jpg");
-    std::cout << "\nSaved: enhanced-k" << K << ".jpg\n\n";
+    std::string enhPath = outDir + "enhanced-k" + std::to_string(K) + ".jpg";
+    saveImage(enhanced, enhPath);
+    std::cout << "\nSaved: " << enhPath << "\n\n";
 
     ImageGray grayEnh = toGrayImage(enhanced);
     std::vector<double> wholeAfter(grayEnh.data.begin(), grayEnh.data.end());
