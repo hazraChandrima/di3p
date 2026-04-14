@@ -33,9 +33,9 @@ _kuch yaad ayi??_
 
 | K | Segmentation | Output Image | Evaluation Metrics |
 |:-:|:---:|:---:|:---:|
-| **4** | <img src="./images/test1/output/k4/k4.jpg" width="200"/> | <img src="./images/test1/output/k4/enhanced-k4.jpg" width="200"/> | <img src="./images/test1/output/k4/eval.png" width="400"/> |
-| **6** | <img src="./images/test1/output/k6/k6.jpg" width="200"/> | <img src="./images/test1/output/k6/enhanced-k6.jpg" width="200"/> | <img src="./images/test1/output/k6/eval.png" width="400"/> |
-| **10** | <img src="./images/test1/output/k10/k10.jpg" width="200"/> | <img src="./images/test1/output/k10/enhanced-k10.jpg" width="200"/> | <img src="./images/test1/output/k10/eval.png" width="400"/> |
-| **14** | <img src="./images/test1/output/k14/k14.jpg" width="200"/> | <img src="./images/test1/output/k14/enhanced-k14.jpg" width="200"/> | <img src="./images/test1/output/k14/eval.png" width="400"/> |
-| **20** | <img src="./images/test1/output/k20/k20.jpg" width="200"/> | <img src="./images/test1/output/k20/enhanced-k20.jpg" width="200"/> | <img src="./images/test1/output/k20/eval.png" width="400"/> |
-| **40** | <img src="./images/test1/output/k40/k40.jpg" width="200"/> | <img src="./images/test1/output/k40/enhanced-k40.jpg" width="200"/> | <img src="./images/test1/output/k40/eval.png" width="400"/> |
+| **4** | <img src="./images/test1/output/k4/k4.jpg" width="400"/> | <img src="./images/test1/output/k4/enhanced-k4.jpg" width="400"/> | <img src="./images/test1/output/k4/eval.png" width="400"/> |
+| **6** | <img src="./images/test1/output/k6/k6.jpg" width="400"/> | <img src="./images/test1/output/k6/enhanced-k6.jpg" width="400"/> | <img src="./images/test1/output/k6/eval.png" width="400"/> |
+| **10** | <img src="./images/test1/output/k10/k10.jpg" width="400"/> | <img src="./images/test1/output/k10/enhanced-k10.jpg" width="400"/> | <img src="./images/test1/output/k10/eval.png" width="400"/> |
+| **14** | <img src="./images/test1/output/k14/k14.jpg" width="400"/> | <img src="./images/test1/output/k14/enhanced-k14.jpg" width="400"/> | <img src="./images/test1/output/k14/eval.png" width="400"/> |
+| **20** | <img src="./images/test1/output/k20/k20.jpg" width="400"/> | <img src="./images/test1/output/k20/enhanced-k20.jpg" width="400"/> | <img src="./images/test1/output/k20/eval.png" width="400"/> |
+| **40** | <img src="./images/test1/output/k40/k40.jpg" width="400"/> | <img src="./images/test1/output/k40/enhanced-k40.jpg" width="400"/> | <img src="./images/test1/output/k40/eval.png" width="400"/> |
