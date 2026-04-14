@@ -17,8 +17,16 @@ make
 Inside the `build/` directory:
 
 ```bash
-./analyzer ../images/fields.jpg [K=4]
+./analyzer <source> <dest_dirname> [K=4] [--nodct]
 ```
+
+| arg | desc |
+|---|---|
+| `source` | Path to the input image |
+| `dest_dirname` | Name of the output folder — program writes to `../images/<dest_dirname>/output/` |
+| `K` | Number of segments for K-Means (default: `4`) |
+| `--nodct` | Skip DCT blockiness |
+
 
 ## Results
 
@@ -30,6 +38,8 @@ Inside the `build/` directory:
   <img src="./images/test1/flower.jpeg" alt="Input Image" width="400"/>
 </div>
 
+<br/>
+
 
 | K | Segmentation | Output Image | Evaluation Metrics |
 |:-:|:---:|:---:|:---:|
@@ -39,7 +49,6 @@ Inside the `build/` directory:
 | **20** | <img src="./images/test1/output/k20/k20.jpg" width="400"/> | <img src="./images/test1/output/k20/enhanced-k20.jpg" width="400"/> | <img src="./images/test1/output/k20/eval.png" width="400"/> |
 | **40** | <img src="./images/test1/output/k40/k40.jpg" width="400"/> | <img src="./images/test1/output/k40/enhanced-k40.jpg" width="400"/> | <img src="./images/test1/output/k40/eval.png" width="400"/> |
 
----
 
 ### 2. Hills
 
@@ -47,6 +56,8 @@ Inside the `build/` directory:
   <div align="center">Input Image</div>
   <img src="./images/test2/scene.jpeg" alt="Input Image" width="400"/>
 </div>
+
+<br/>
 
 | K | Segmentation | Output Image | Evaluation Metrics |
 |:-:|:---:|:---:|:---:|
