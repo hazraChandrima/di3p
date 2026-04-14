@@ -231,8 +231,8 @@ int main(int argc, char* argv[]) {
     KMeansResult seg = kmeansSegment(img.pixels, img.rows, img.cols, K);
     if (!dryRun) {
         Image segVis = visualiseSegmentation(img, seg);
-        saveImage(segVis, "output_segmentation.jpg");
-        std::cout << "  Saved: output_segmentation.jpg\n";
+        saveImage(segVis, "../images/test1/output/k" + std::to_string(K) + ".jpg");
+        std::cout << "  Saved: k" << K << ".jpg\n";
     }
     std::cout << "\n";
 
@@ -311,8 +311,8 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    saveImage(enhanced, "output_enhanced.jpg");
-    std::cout << "\nSaved: output_enhanced.jpg\n\n";
+    saveImage(enhanced, "../images/test1/output/enhanced-k" + std::to_string(K) + ".jpg");
+    std::cout << "\nSaved: enhanced-k" << K << ".jpg\n\n";
 
     ImageGray grayEnh = toGrayImage(enhanced);
     std::vector<double> wholeAfter(grayEnh.data.begin(), grayEnh.data.end());
