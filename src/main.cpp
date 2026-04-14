@@ -1,17 +1,3 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// main.cpp — Image Quality Analyzer & Enhancer  (rewrite B+C)
-//
-// Changes from v1:
-//   B) Stage 3 operates directly on RGB bounding-box regions — no ratio hack
-//   C) --dry-run flag: diagnose only, print scores, write nothing
-//
-// Usage:
-//   ./analyzer input.jpg [K=4] [--nodct] [--dryrun]
-//
-// Build:
-//   g++ -std=c++17 -O2 -I. src/main.cpp -o analyzer \
-//       $(pkg-config --cflags --libs opencv4)
-// ─────────────────────────────────────────────────────────────────────────────
 #include <iostream>
 #include <iomanip>
 #include <string>
@@ -30,7 +16,6 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 
-// ── Image I/O ─────────────────────────────────────────────────────────────────
 struct Image {
     int rows = 0, cols = 0;
     std::vector<PixelRGB> pixels;
@@ -80,7 +65,7 @@ ImageGray toGrayImage(const Image& img) {
     return g;
 }
 
-// ── Segmentation visualiser ───────────────────────────────────────────────────
+// Segmentation visualiser
 Image visualiseSegmentation(const Image& img, const KMeansResult& seg) {
     const std::vector<PixelRGB> pal = {
         {100,200,220},{240,180,100},{180,230,130},{230,140,160},{150,150,240},{200,200,100}
@@ -96,7 +81,7 @@ Image visualiseSegmentation(const Image& img, const KMeansResult& seg) {
     return vis;
 }
 
-// ── Bounding box of a region ──────────────────────────────────────────────────
+// Bounding box of a region
 struct BBox { int rMin, rMax, cMin, cMax; };
 
 BBox boundingBox(const std::vector<int>& indices, int cols) {
@@ -111,7 +96,6 @@ BBox boundingBox(const std::vector<int>& indices, int cols) {
 
 // Extract bounding-box RGB patch as a contiguous rows×cols RGB buffer
 // Non-region pixels within the bbox are filled with region's mean colour
-// so DFT doesn't see discontinuities at region boundaries.
 RGBBuf extractBBoxRGB(const Image& img, const BBox& bb,
                        const std::vector<int>& indices) {
     int rows = bb.rMax - bb.rMin + 1;
@@ -143,7 +127,7 @@ void writeBBoxRGB(Image& img, const RGBBuf& buf, const BBox& bb,
     }
 }
 
-// ── Region diagnosis ──────────────────────────────────────────────────────────
+
 RegionDiagnosis diagnoseRegion(const RGBBuf& regionBuf, int rows, int cols,
                                 bool runDCT) {
     // DFT diagnosis on luminance channel
@@ -195,7 +179,6 @@ RegionDiagnosis diagnoseRegion(const RGBBuf& regionBuf, int rows, int cols,
     };
 }
 
-// ── Dry-run report for one region ─────────────────────────────────────────────
 void printDryRunReport(int k, int regionSize, const BBox& bb,
                         const RegionDiagnosis& d) {
     std::cout << std::fixed << std::setprecision(4);
@@ -214,7 +197,6 @@ void printDryRunReport(int k, int regionSize, const BBox& bb,
               << "  → " << (d.blocky       ? "BLOCKY"   : "ok") << "\n\n";
 }
 
-// ── main ──────────────────────────────────────────────────────────────────────
 int main(int argc, char* argv[]) {
     if (argc < 2) {
         std::cerr << "Usage: ./analyzer input.jpg [K=4] [--nodct] [--dryrun]\n";
@@ -240,7 +222,6 @@ int main(int argc, char* argv[]) {
               << "  mode=" << (dryRun?"DRY-RUN (no pixels changed)":"ENHANCE") << "\n";
     std::cout << "══════════════════════════════════════════════\n\n";
 
-    // Load
     Image img = loadImage(inputPath);
     Image enhanced = img;  // will be modified only if !dryRun
     std::cout << "Image: " << img.rows << "×" << img.cols << " px\n\n";
@@ -282,7 +263,6 @@ int main(int argc, char* argv[]) {
             continue;
         }
 
-        // Print what we're doing
         std::cout << "[ Stage 1+3 ] Region " << k
                   << " (" << indices.size() << " px) —";
         if (diag.blurry)       std::cout << " BLURRY";
@@ -331,7 +311,6 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    // Save + display
     saveImage(enhanced, "output_enhanced.jpg");
     std::cout << "\nSaved: output_enhanced.jpg\n\n";
 

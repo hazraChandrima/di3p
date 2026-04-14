@@ -1,10 +1,5 @@
 #pragma once
-// ─────────────────────────────────────────────────────────────────────────────
-// Stage 2 — K-Means Segmentation (LAB color space, from scratch)
-//   • RGB → CIE LAB conversion (no OpenCV algorithms, only formulas)
-//   • K-Means clustering on [L, A, B] channels
-//   • Produces per-pixel region label map
-// ─────────────────────────────────────────────────────────────────────────────
+
 #include <vector>
 #include <cmath>
 #include <cstdint>
@@ -15,12 +10,10 @@
 
 constexpr double PI_KM = 3.14159265358979323846;
 
-// ── Pixel types ───────────────────────────────────────────────────────────────
-
 struct PixelRGB  { uint8_t r, g, b; };
 struct PixelLAB  { double L, A, B;  };
 
-// ── RGB → XYZ → LAB ──────────────────────────────────────────────────────────
+// RGB → XYZ → LAB
 
 // Linearise sRGB channel (gamma correction)
 inline double srgbLinear(double c) {
@@ -62,7 +55,7 @@ PixelLAB rgbToLab(PixelRGB p) {
     };
 }
 
-// ── K-Means ───────────────────────────────────────────────────────────────────
+// K-Means
 
 struct Centroid { double L, A, B; };
 
@@ -161,7 +154,7 @@ KMeansResult kmeansSegment(
     return {labels, centroids, rows, cols};
 }
 
-// ── Region mask helper ────────────────────────────────────────────────────────
+// Region mask helper
 // Returns a boolean mask for a single cluster k
 std::vector<bool> regionMask(const KMeansResult& seg, int k) {
     int N = seg.rows * seg.cols;

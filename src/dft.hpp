@@ -1,19 +1,5 @@
 #pragma once
-// ─────────────────────────────────────────────────────────────────────────────
-// Stage 1 — FFT / IFFT from scratch  (Cooley-Tukey radix-2 DIT)
-//
-// Replaces the O(N²) naive DFT with O(N log N) FFT.
-// Everything else (2D decomposition, shift, masks, scores) is unchanged.
-//
-// Speedup on a 256-point signal: 256² = 65536 ops  →  256×8 = 2048 ops  (32×)
-// On a full 512×512 region:     O(N²) ≈ 68 billion  →  O(N logN) ≈ 2.4 million
-//
-// Algorithm: Cooley-Tukey in-place radix-2 DIT (decimation-in-time)
-//   1. Bit-reverse permutation
-//   2. Butterfly passes: log2(N) stages, N/2 butterflies per stage
-//   Twiddle factors: W_N^k = e^(−j·2π·k/N)  (forward)
-//                             e^(+j·2π·k/N)  (inverse, then divide by N)
-// ─────────────────────────────────────────────────────────────────────────────
+
 #include <vector>
 #include <complex>
 #include <cmath>
@@ -29,7 +15,6 @@ using RealMatrix = std::vector<std::vector<double>>;
 
 constexpr double PI = 3.14159265358979323846;
 
-// ── helpers ───────────────────────────────────────────────────────────────────
 
 inline int nextPow2(int n) {
     int p = 1;
@@ -96,7 +81,6 @@ void fft1d_inplace(CRow& x, bool forward) {
     }
 }
 
-// Public wrapper — same signature as old dft1d for drop-in replacement
 CRow dft1d(const CRow& x, bool inverse = false) {
     CRow y = x;
     // Pad to power of 2 if needed (shouldn't happen in practice since
@@ -108,8 +92,7 @@ CRow dft1d(const CRow& x, bool inverse = false) {
     return y;
 }
 
-// ── 2-D FFT via row-column decomposition ─────────────────────────────────────
-// Identical logic to before — just calls the O(N log N) fft1d now
+// 2-D FFT via row-column decomposition
 CMatrix dft2d(const CMatrix& in, bool inverse = false) {
     int rows = (int)in.size();
     int cols = (int)in[0].size();
@@ -129,7 +112,7 @@ CMatrix dft2d(const CMatrix& in, bool inverse = false) {
     return out;
 }
 
-// ── FFT shift ─────────────────────────────────────────────────────────────────
+// FFT shift
 CMatrix fftShift(const CMatrix& in) {
     int rows = (int)in.size(), cols = (int)in[0].size();
     CMatrix out(rows, CRow(cols));
@@ -142,7 +125,6 @@ CMatrix fftShift(const CMatrix& in) {
 
 CMatrix ifftShift(const CMatrix& in) { return fftShift(in); }
 
-// ── ImageGray ─────────────────────────────────────────────────────────────────
 struct ImageGray {
     int rows, cols;
     std::vector<double> data; // row-major, [0,255]
@@ -178,7 +160,7 @@ ImageGray toImageGray(const CMatrix& m, int origRows, int origCols) {
     return img;
 }
 
-// ── Magnitude spectrum ────────────────────────────────────────────────────────
+// Magnitude spectrum
 RealMatrix magnitudeSpectrum(const CMatrix& dft) {
     int rows = (int)dft.size(), cols = (int)dft[0].size();
     RealMatrix mag(rows, std::vector<double>(cols));
@@ -188,7 +170,7 @@ RealMatrix magnitudeSpectrum(const CMatrix& dft) {
     return mag;
 }
 
-// ── Diagnosis scores ──────────────────────────────────────────────────────────
+// Diagnosis scores
 struct DFTScores {
     double blurScore;   // highFreqEnergy / totalEnergy — low = blurry
     double noiseScore;  // variance of high-freq magnitudes — low = uniform noise
@@ -228,7 +210,7 @@ DFTScores computeScores(const CMatrix& shifted, double cutoffRatio = 0.3) {
     return {blurScore, var};
 }
 
-// ── Spectral masks ────────────────────────────────────────────────────────────
+// Spectral masks
 CMatrix applyLowPassMask(const CMatrix& shifted, double cutoffRatio = 0.3) {
     int rows = (int)shifted.size(), cols = (int)shifted[0].size();
     int cr = rows / 2, cc = cols / 2;
@@ -256,7 +238,6 @@ CMatrix applyHighBoostMask(const CMatrix& shifted,
     return out;
 }
 
-// ── Full pipeline ─────────────────────────────────────────────────────────────
 enum class DFTMode { DENOISE, SHARPEN, DIAGNOSE_ONLY };
 
 struct DFTResult {

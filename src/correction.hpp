@@ -1,14 +1,5 @@
 #pragma once
-// ─────────────────────────────────────────────────────────────────────────────
-// Stage 3 — Per-Region Correction  (rewrite B)
-//
-// Key design principles:
-//   1. ALL corrections work directly on RGB pixel buffers — no grayscale ratio hack
-//   2. DFT sharpening uses unsharp masking (blend, not replace) — far less destructive
-//   3. Histogram stretching uses percentile clipping (2%–98%) not hard min/max
-//   4. Every correction is blended with the original at a conservative strength
-//   5. Thresholds are tight — only genuinely degraded regions get touched
-// ─────────────────────────────────────────────────────────────────────────────
+
 #include <vector>
 #include <cstdint>
 #include <cmath>
@@ -16,8 +7,8 @@
 #include <numeric>
 #include "dft.hpp"
 
-// ── RGB region buffer helpers ─────────────────────────────────────────────────
-// Interleaved RGB flat buffer: [R0,G0,B0, R1,G1,B1, ...]
+// RGB region buffer helpers
+// [R0,G0,B0, R1,G1,B1, ...]
 using RGBBuf = std::vector<uint8_t>;
 
 std::vector<double> extractChannel(const RGBBuf& buf, int ch) {
@@ -43,7 +34,7 @@ std::vector<double> blendCh(const std::vector<double>& orig,
     return out;
 }
 
-// ── Histogram statistics ──────────────────────────────────────────────────────
+// Histogram statistic
 struct HistStats {
     double mean, stddev, p2, p98;
     bool underExposed; // mean < 60  AND p98 < 180
@@ -71,7 +62,7 @@ HistStats computeHistStats(const RGBBuf& pixels) {
             mean > 195.0 && p2  > 80.0};
 }
 
-// ── 3a. Histogram stretch (percentile-clipped, blended) ──────────────────────
+// Histogram stretch
 std::vector<double> stretchChPercentile(const std::vector<double>& ch,
                                          double lo, double hi) {
     if (hi - lo < 5.0) return ch;
@@ -94,7 +85,6 @@ RGBBuf histogramStretchLAB(const RGBBuf& pixels, double strength = 0.9) {
         Cr[i] =  0.5*r - 0.418688*g - 0.081312*b + 128.0;
     }
 
-    // Percentile clip — tighter: 1%–99% so blurry compressed histograms still stretch
     auto sv = Y; std::sort(sv.begin(), sv.end());
     double lo = sv[std::max(0, (int)(0.01*N))];
     double hi = sv[std::min(N-1, (int)(0.99*N))];
@@ -128,8 +118,8 @@ RGBBuf histogramStretchLAB(const RGBBuf& pixels, double strength = 0.9) {
 }
 
 
-// ── 3b. Unsharp mask sharpening (DFT-based, per channel, blended) ────────────
-// sharp = orig + amount*(orig - blurred)   — never replaces, always adds edge info
+// Unsharp mask sharpening
+// sharp = orig + amount*(orig - blurred)
 ImageGray channelToGray(const std::vector<double>& ch, int rows, int cols) {
     ImageGray g; g.rows = rows; g.cols = cols; g.data = ch; return g;
 }
@@ -161,7 +151,7 @@ RGBBuf sharpenRGB(const RGBBuf& pixels, int rows, int cols,
     return out;
 }
 
-// ── 3c. DFT denoising (low-pass per channel, blended) ────────────────────────
+// DFT denoising
 RGBBuf denoiseRGB(const RGBBuf& pixels, int rows, int cols,
                    double cutoffRatio = 0.35, double strength = 0.5) {
     RGBBuf out = pixels;
@@ -180,7 +170,7 @@ RGBBuf denoiseRGB(const RGBBuf& pixels, int rows, int cols,
     return out;
 }
 
-// ── 3d. DCT blockiness removal (per channel, blended) ────────────────────────
+// DCT blockiness removal
 constexpr int BLOCK = 8;
 constexpr double PI_C = 3.14159265358979323846;
 
@@ -258,14 +248,12 @@ RGBBuf removeBlockinessRGB(const RGBBuf& pixels, int rows, int cols,
     return out;
 }
 
-// ── Diagnosis struct ──────────────────────────────────────────────────────────
 struct RegionDiagnosis {
     bool   blurry, noisy, underExposed, overExposed, blocky;
     // Raw scores (for dry-run printing)
     double blurScore, noiseScore, histMean, histStddev, boundaryDiff;
 };
 
-// ── Main dispatch ─────────────────────────────────────────────────────────────
 RGBBuf correctRegionRGB(const RGBBuf& pixels, int rows, int cols,
                          const RegionDiagnosis& diag) {
     RGBBuf result = pixels;
@@ -275,7 +263,6 @@ RGBBuf correctRegionRGB(const RGBBuf& pixels, int rows, int cols,
         result = denoiseRGB(result, rows, cols, 0.35, 0.5);
     else if (diag.blurry)
         result = sharpenRGB(result, rows, cols, 0.15, 0.5, 0.5);
-    // Only stretch if actually under/over exposed — not just because it's blurry
     if (diag.underExposed || diag.overExposed)
         result = histogramStretchLAB(result, 0.9);
     return result;

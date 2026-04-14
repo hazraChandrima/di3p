@@ -1,12 +1,5 @@
 #pragma once
-// ─────────────────────────────────────────────────────────────────────────────
-// Stage 4 — Evaluation Metrics (from scratch)
-//   • PSNR  — Peak Signal-to-Noise Ratio
-//   • SSIM  — Structural Similarity Index (Wang et al. 2004)
-//   • Entropy — Shannon entropy of the pixel intensity distribution
-//
-//   All metrics can be computed globally or per-region.
-// ─────────────────────────────────────────────────────────────────────────────
+
 #include <vector>
 #include <cmath>
 #include <numeric>
@@ -43,7 +36,7 @@ double computePSNR(const std::vector<double>& original,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SSIM  (Wang et al., IEEE TIP 2004)
+// SSIM
 //   SSIM(x, y) = [2μ_x μ_y + C1][2σ_xy + C2]
 //                / [(μ_x² + μ_y² + C1)(σ_x² + σ_y² + C2)]
 //
@@ -104,15 +97,11 @@ double computeEntropy(const std::vector<double>& pixels) {
     return H; // bits per pixel, max ~8 bits for uniform distribution
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Per-region metric bundle
-// ─────────────────────────────────────────────────────────────────────────────
 struct RegionMetrics {
     double psnr_before, psnr_after;
     double ssim_before, ssim_after;
     double entropy_before, entropy_after;
 
-    // Convenience: improvement deltas
     double psnrGain()    const { return psnr_after    - psnr_before;    }
     double ssimGain()    const { return ssim_after     - ssim_before;    }
     double entropyGain() const { return entropy_after  - entropy_before; }
@@ -130,9 +119,6 @@ RegionMetrics evaluateRegion(const std::vector<double>& original,
     };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Diagnostic report (text)
-// ─────────────────────────────────────────────────────────────────────────────
 std::string formatReport(int regionId,
                          const std::string& diagnosis,
                          const RegionMetrics& m) {
@@ -153,7 +139,6 @@ std::string formatReport(int regionId,
     return ss.str();
 }
 
-// Whole-image summary
 std::string formatSummary(const std::vector<double>& origFlat,
                            const std::vector<double>& beforeFlat,
                            const std::vector<double>& afterFlat) {
