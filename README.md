@@ -25,10 +25,10 @@ Inside the `build/` directory:
 ### 1. Flower
 
 
-<p align="center">
+<div align="center">
   <div align="center">Input Image<br/><i>kuch yaad ayi?</i></div>
   <img src="./images/test1/flower.jpeg" alt="Input Image" width="400"/>
-</p>
+</div>
 
 
 | K | Segmentation | Output Image | Evaluation Metrics |
@@ -43,10 +43,10 @@ Inside the `build/` directory:
 
 ### 2. Hills
 
-<p align="center">
+<div align="center">
   <div align="center">Input Image</div>
   <img src="./images/test2/scene.jpeg" alt="Input Image" width="400"/>
-</p>
+</div>
 
 | K | Segmentation | Output Image | Evaluation Metrics |
 |:-:|:---:|:---:|:---:|
