@@ -26,9 +26,8 @@ Inside the `build/` directory:
 
 
 <p align="center">
+  <div align="center">Input Image<br/><i>kuch yaad ayi?</i></div>
   <img src="./images/test1/flower.jpeg" alt="Input Image" width="400"/>
-
-<div align="center">Input Image<br/><i>kuch yaad ayi?</i></div>
 </p>
 
 
@@ -40,12 +39,13 @@ Inside the `build/` directory:
 | **20** | <img src="./images/test1/output/k20/k20.jpg" width="400"/> | <img src="./images/test1/output/k20/enhanced-k20.jpg" width="400"/> | <img src="./images/test1/output/k20/eval.png" width="400"/> |
 | **40** | <img src="./images/test1/output/k40/k40.jpg" width="400"/> | <img src="./images/test1/output/k40/enhanced-k40.jpg" width="400"/> | <img src="./images/test1/output/k40/eval.png" width="400"/> |
 
+---
 
 ### 2. Hills
 
 <p align="center">
-  <img src="./images/test2/scene.jpeg" alt="Input Image" width="400"/>
   <div align="center">Input Image</div>
+  <img src="./images/test2/scene.jpeg" alt="Input Image" width="400"/>
 </p>
 
 | K | Segmentation | Output Image | Evaluation Metrics |
