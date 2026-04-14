@@ -24,6 +24,8 @@ Inside the `build/` directory:
 
 ### Input Image
 
+_kuch yaad ayi??_
+
 <p align="center">
   <img src="./images/test1/flower.jpeg" alt="Input Image" width="400"/>
 </p>
@@ -36,3 +38,4 @@ Inside the `build/` directory:
 | **10** | <img src="./images/test1/output/k10/k10.jpg" width="200"/> | <img src="./images/test1/output/k10/enhanced-k10.jpg" width="200"/> | <img src="./images/test1/output/k10/eval.png" width="400"/> |
 | **14** | <img src="./images/test1/output/k14/k14.jpg" width="200"/> | <img src="./images/test1/output/k14/enhanced-k14.jpg" width="200"/> | <img src="./images/test1/output/k14/eval.png" width="400"/> |
 | **20** | <img src="./images/test1/output/k20/k20.jpg" width="200"/> | <img src="./images/test1/output/k20/enhanced-k20.jpg" width="200"/> | <img src="./images/test1/output/k20/eval.png" width="400"/> |
+| **40** | <img src="./images/test1/output/k40/k40.jpg" width="200"/> | <img src="./images/test1/output/k40/enhanced-k40.jpg" width="200"/> | <img src="./images/test1/output/k40/eval.png" width="400"/> |
