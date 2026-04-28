@@ -395,7 +395,7 @@ int main(int argc, char* argv[]) {
     // ── Per-region processing ─────────────────────────────────────────────────
     Image enhanced      = img;
     std::vector<uint8_t> origRGB = imageToRGBBuf(img);
-
+    std::cout << "\n____________DIAGNOSIS____________\n";
     for (int k = 0; k < K; ++k) {
         std::vector<int> indices = regionIndices(seg, k);
         if (indices.empty()) continue;
@@ -416,11 +416,11 @@ int main(int argc, char* argv[]) {
         if (diagStr.empty())   diagStr = "clean";
 
         std::cout << std::fixed << std::setprecision(4);
-        std::cout << "region " << k << " (" << indices.size() << " px): " << diagStr << "\n";
-        std::cout << "  blur=" << diag.blurScore
-                  << " noise=" << diag.noiseScore
-                  << " mean=" << diag.histMean;
-        if (runDCT) std::cout << " boundary=" << diag.boundaryDiff;
+        std::cout << "\nRegion " << k << " (" << indices.size() << " px): " << diagStr;
+        std::cout << "\nBLUR  :" << diag.blurScore
+                  << "\nNOISE :" << diag.noiseScore
+                  << "\nMEAN  :" << diag.histMean;
+        if (runDCT) std::cout << "\nBOUNDARY :" << diag.boundaryDiff;
         std::cout << "\n";
 
         if (mode == 2) continue;  // diagnose only
@@ -437,7 +437,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (mode == 2) {
-        std::cout << "diagnosis complete, nothing written\n";
+        std::cout << "\n\ndiagnosis complete, nothing written\n";
         return 0;
     }
 
