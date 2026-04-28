@@ -1,19 +1,21 @@
-cmake_minimum_required(VERSION 3.14)
-project(ImageQualityAnalyzer CXX)
+cmake_minimum_required(VERSION 3.16)
+project(image_enhancer CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# optimisations
-set(CMAKE_CXX_FLAGS_RELEASE "-O2")
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-# opencv only for image I/O and display
-find_package(OpenCV REQUIRED)
-include_directories(${OpenCV_INCLUDE_DIRS})
-include_directories(${CMAKE_SOURCE_DIR})
+add_executable(enhancer
+    main.cpp
+    src/dft.cpp
+    src/kmeans.cpp
+    src/correction.cpp
+    src/metrics.cpp
+)
 
-add_executable(analyzer src/main.cpp)
-target_link_libraries(analyzer ${OpenCV_LIBS})
+target_compile_options(enhancer PRIVATE
+    $<$<CONFIG:Release>:-O3 -march=native>
+)
