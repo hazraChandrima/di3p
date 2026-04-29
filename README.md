@@ -17,53 +17,61 @@ make
 Inside the `build/` directory:
 
 ```bash
-./analyzer <source> <dest_dirname> [K=4] [--nodct]
+./enhancer
 ```
 
-| arg | desc |
-|---|---|
-| `source` | Path to the input image |
-| `dest_dirname` | Name of the output folder — program writes to `../images/<dest_dirname>/output/` |
-| `K` | Number of segments for K-Means (default: `4`) |
-| `--nodct` | Skip DCT blockiness |
+you will be prompted the following:
+
+```bash
+image enhancer
+--------------
+input image: <relative_path_of_source>
+
+mode:
+  1) manual  - pick effects yourself
+  2) auto    - diagnose and fix automatically
+  3) diagnose only - no changes
+  4) segmentation view - just show regions
+
+```
+
+Select according to your needs.
+
+
+**Manual:** Apply effects (sharpen, denoise, exposure fix, remove blockiness) one at a time in any order with custom parameters. You control everything.
+
+**Auto:** The image is segmented into K regions; each region is independently diagnosed and corrected. Prints a per-region report with blur, noise, exposure, and blockiness scores before saving the enhanced output.
 
 
 ## Results
 
-### 1. Flower
-
+### 1. Manual Mode
 
 <div align="center">
-  <div align="center">Input Image<br/><i>kuch yaad ayi?</i></div>
-  <img src="./images/test1/flower.jpeg" alt="Input Image" width="400"/>
+  <img src="./output/comparison1.png" alt="Input Image" width="800"/>
+  <div align="center">Input Image(left), enhanced image(right)<br/></div>
 </div>
 
 <br/>
 
 
-| K | Segmentation | Output Image | Evaluation Metrics |
-|:-:|:---:|:---:|:---:|
-| **4** | <img src="./images/test1/output/k4/k4.jpg" width="400"/> | <img src="./images/test1/output/k4/enhanced-k4.jpg" width="400"/> | <img src="./images/test1/output/k4/eval.png" width="400"/> |
-| **6** | <img src="./images/test1/output/k6/k6.jpg" width="400"/> | <img src="./images/test1/output/k6/enhanced-k6.jpg" width="400"/> | <img src="./images/test1/output/k6/eval.png" width="400"/> |
-| **10** | <img src="./images/test1/output/k10/k10.jpg" width="400"/> | <img src="./images/test1/output/k10/enhanced-k10.jpg" width="400"/> | <img src="./images/test1/output/k10/eval.png" width="400"/> |
-| **20** | <img src="./images/test1/output/k20/k20.jpg" width="400"/> | <img src="./images/test1/output/k20/enhanced-k20.jpg" width="400"/> | <img src="./images/test1/output/k20/eval.png" width="400"/> |
-| **40** | <img src="./images/test1/output/k40/k40.jpg" width="400"/> | <img src="./images/test1/output/k40/enhanced-k40.jpg" width="400"/> | <img src="./images/test1/output/k40/eval.png" width="400"/> |
-
-
-### 2. Hills
-
 <div align="center">
-  <div align="center">Input Image</div>
-  <img src="./images/test2/scene.jpeg" alt="Input Image" width="400"/>
+  <img src="./output/comparison2.png" alt="Input Image" width="800"/>
+  <div align="center">Input Image(left), enhanced image(right)<br/></div>
 </div>
 
 <br/>
 
-| K | Segmentation | Output Image | Evaluation Metrics |
-|:-:|:---:|:---:|:---:|
-| **2** | <img src="./images/test2/output/k2/k2.jpg" width="400"/> | <img src="./images/test2/output/k2/enhanced-k2.jpg" width="400"/> | <img src="./images/test2/output/k2/eval.png" width="400"/> |
-| **4** | <img src="./images/test2/output/k4/k4.jpg" width="400"/> | <img src="./images/test2/output/k4/enhanced-k4.jpg" width="400"/> | <img src="./images/test2/output/k4/eval.png" width="400"/> |
-| **6** | <img src="./images/test2/output/k6/k6.jpg" width="400"/> | <img src="./images/test2/output/k6/enhanced-k6.jpg" width="400"/> | <img src="./images/test2/output/k6/eval.png" width="400"/> |
-| **10** | <img src="./images/test2/output/k10/k10.jpg" width="400"/> | <img src="./images/test2/output/k10/enhanced-k10.jpg" width="400"/> | <img src="./images/test2/output/k10/eval.png" width="400"/> |
-| **20** | <img src="./images/test2/output/k20/k20.jpg" width="400"/> | <img src="./images/test2/output/k20/enhanced-k20.jpg" width="400"/> | <img src="./images/test2/output/k20/eval.png" width="400"/> |
-| **40** | <img src="./images/test2/output/k40/k40.jpg" width="400"/> | <img src="./images/test2/output/k40/enhanced-k40.jpg" width="400"/> | <img src="./images/test2/output/k40/eval.png" width="400"/> |
+
+
+### 2. Automatic Mode
+
+<div align="center">
+  <img src="./output/comparison3.png" alt="Input Image" width="800"/>
+  <div align="center">Input Image(left), enhanced image(right)<br/></div>
+</div>
+
+<div align="center">
+  <img src="./output/test6_seg_overlay.jpg" alt="Input Image" width="400"/>
+  <div align="center">k = 4 segmentation of the above image<br/></div>
+</div>
