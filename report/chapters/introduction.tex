@@ -1,0 +1,54 @@
+\chapter{Introduction}
+
+\section{Background}
+
+When doing image analysis in the spatial domain, operations are performed directly
+on pixels. Blurring an image, involves sliding an averaging kernel over
+the pixel grid; edge detection applies a Sobel operator to the same grid. But,
+spatial filtering is inherently limited. Applying a blur to suppress noise in a complex scene
+will degrade the structures that should be preserved: the edges, textures, and
+boundaries of the objects of interest.
+
+\vspace{0.15in}
+\noindent
+The frequency domain offers a fundamentally different perspective \cite{oppenheim1999}.
+A large, uniformly coloured region such as a clear sky corresponds to low-frequency
+content. A sharp edge such as the silhouette of a mountain against that sky corresponds
+to high-frequency content. Random grain or sensor noise manifests as very
+high-frequency energy \cite{gonzalez_woods}. By operating in this domain, one gains the
+ability to precisely target specific types of content for removal or enhancement without
+disturbing the rest of the image \cite{pratt2007}.
+
+\vspace{0.15in}
+\noindent
+Our project, which we are calling as \textbf{di3p}, is built to actually implement this idea in
+C++ without leaning on OpenCV or any other library that would just hide what was
+happening underneath. We wanted to write the transforms ourselves and see exactly what was going on at every step.
+
+\section{Motivation}
+
+Existing frequency-domain filtering techniques like Butterworth and Gaussian 
+filters are applied globally across an entire image \cite{gonzalez_woods}. 
+This uniform treatment ignores the fact that distinct regions of a natural image 
+exhibit different spectral characteristics \cite{pratt2007}. A flat sky 
+and a textured flower petal will require different denoising strategies. 
+While image segmentation methods such as K-Means \cite{jain_kmeans_survey} and 
+Mean Shift \cite{comaniciu2002} are well-studied, they are rarely composed with 
+per-region frequency-domain processing into a unified pipeline. So now, our project solves 
+that gap by combining K-Means spatial segmentation with region-specific DFT and DCT 
+filtering.
+
+\vspace{0.15in}
+\noindent
+Consider photo of a flower with a distracting repeating-pattern background. A spatial blur will smooth both the noise and the flower simultaneously, destroying
+structural detail in the attempt to remove unwanted content. A frequency-domain approach
+allows us to identify the spectral signature of the noise and suppress it selectively.
+
+\vspace{0.15in}
+\noindent
+First, we performed performed segmentation-first processing. If the flower and
+the background are separated into distinct clusters before any frequency-domain work is
+performed, filters can be tailored per-region. The flower's cluster might receive a
+sharpening high-pass filter to emphasise petal edges, and the background cluster
+receives a low-pass filter to soften the noise pattern. This chaining of K-Means spatial
+grouping with DFT/DCT frequency analysis is the main idea behind out project.

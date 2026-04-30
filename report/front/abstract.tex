@@ -1,0 +1,21 @@
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+
+Our group has built a C++ toolkit called \textbf{di3p} that enhances images by combining spatial
+segmentation with frequency-domain filtering. The core idea is straightforward: instead
+of applying the same filter to an entire image, we first use K-Means clustering to split
+the image into colour-coherent regions, and then treat each region independently in the
+frequency domain using the Discrete Fourier Transform (DFT) and the Discrete Cosine
+Transform (DCT). This lets us apply targeted low-pass or high-pass filters to specific
+parts of the scene without touching the rest. The system was tested on our own photographs, using Shannon entropy
+reduction and PSNR as metrics to confirm that noise was being suppressed
+without degrading structure. 
+
+\vspace{0.5cm}
+\noindent The entire pipeline was written from scratch in
+C++17 with no dependency on OpenCV or similar libraries.
+
+\vspace{0.5cm}
+\noindent\textbf{Keywords:} image segmentation, K-Means clustering, Discrete Fourier
+Transform, Discrete Cosine Transform, frequency-domain filtering, image enhancement,
+PSNR, C++, digital image processing.

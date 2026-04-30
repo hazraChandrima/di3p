@@ -1,0 +1,111 @@
+\chapter{Literature Review}
+
+\section{Image Segmentation and K-Means Clustering}
+
+Before one can do any processing on an image, it's wise if one breaks it into
+pieces that actually mean something. This is what segmentation
+is.
+\cite{shi2000}.
+
+We picked K-Means for this because it requires zero labelled training data and the math
+is straightforward enough to implement from scratch. One gives it
+a number $K$ and it finds $K$ colour groups on its own by minimising how spread out
+each group is internally:
+
+\begin{equation}
+    J = \sum_{i=1}^{K} \sum_{\mathbf{x} \in C_i} \|\mathbf{x} - \boldsymbol{\mu}_i\|^2
+\end{equation}
+
+\noindent Here $C_i$ is the $i$-th cluster and $\boldsymbol{\mu}_i$ is its centroid. Every pixel picks the closest centroid, centroids move to the average of
+their new members, repeat until nothing changes \cite{jain_kmeans_survey}. For
+colour-based tasks it holds up well even against fancier methods \cite{comaniciu2002}.
+
+\vspace{0.15in}
+\noindent
+The problem is that K-Means draws sharp, blocky lines between clusters \cite{jain_kmeans_survey}. There is no gradual blending,
+just a hard cut. Those artificial boundaries turned out to be a real problem for our
+pipeline, which is exactly why we brought Inverse DCT in as a diagnostic tool later on.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\linewidth]{images/blocktry2_seg_overlay.jpg}
+    \caption{Here's an example of how k-means draws blocks}
+    \label{fig:placeholder}
+\end{figure}
+
+\section{The Discrete Fourier Transform}
+
+The DFT is what lets one look at an image from a completely different perspective. Instead of
+a grid of colour values, they sees a map of how much of each frequency is present in the
+image \cite{oppenheim1999}. The 2D version for an image $f(x, y)$ of size $M \times N$
+looks like this:
+
+\begin{equation}
+    F(u, v) = \sum_{x=0}^{M-1} \sum_{y=0}^{N-1} f(x, y) \cdot
+    e^{-j 2\pi \left(\frac{ux}{M} + \frac{vy}{N}\right)}
+\end{equation}
+
+\noindent
+The result is a grid of complex numbers, which is useless to look at directly.
+To actually see anything useful, you find the magnitude:
+
+\begin{equation}
+    |F(u,v)| = \sqrt{\operatorname{Re}(F)^2 + \operatorname{Im}(F)^2}
+\end{equation}
+
+Even then, the first time we plotted this it was just a black screen with a
+white dot in the centre. The issue is the dynamic range: the DC component (the
+average brightness of the whole image) is millions of times larger than the high
+frequency values.
+
+
+\vspace{0.15in}
+\noindent
+Once we are in the frequency domain, filtering is just multiplication.
+We built a mask $H(u,v)$, multiplied it with $F(u,v)$, and transform back with the IDFT
+\cite{brigham1988}. The one thing we learned the hard way is that using a hard circular
+cutoff for the mask creates undesirable ringing in the output, which is the Gibbs phenomenon
+\cite{pratt2007}. Switching to Gaussian and Butterworth masks, which fade out gradually
+instead of cutting off sharply, fixed it.
+
+
+\section{The Fast Fourier Transform (FFT)}
+
+Even though DFT provide the theoretical basis for frequency analysis, computing it using the standard double-summation formula is computationally expensive, with a complexity of $O(N^4)$ for an $N \times N$ image. For any practical real-time application, this is extremely slow. To solve this, we used the Fast Fourier Transform (FFT), the Cooley-Tukey algorithm \cite{cooley1965}.
+
+\vspace{0.15in}
+\noindent
+The FFT uses the periodicity and symmetry of the complex exponential (twiddle factors) to recursively break down a DFT of size $N$ into smaller DFTs. This reduces the computational complexity to:
+
+\begin{equation}
+    O(N^2 \log N)
+\end{equation}
+
+
+\vspace{0.15in}
+\noindent
+One of the hurdles we had encountered was that the most efficient radix-2 FFT algorithms require the input image dimensions to be a power of two ($2^n$). Since our source images were of rectangular resolutions, we had to implement zero-padding to the next power of two before processing.
+
+
+\section{The Discrete Cosine Transform}
+
+The DCT does something similar to the DFT but uses only real cosine functions instead
+of complex exponentials, which makes it much cheaper to compute and easier to work
+with in C++ \cite{ahmed1974}. The 2D form we implemented is:
+
+\begin{equation}
+    C(u, v) = \alpha_u \alpha_v \sum_{x=0}^{M-1} \sum_{y=0}^{N-1}
+    f(x, y) \cdot \cos\!\left[\frac{\pi(2x+1)u}{2M}\right]
+    \cos\!\left[\frac{\pi(2y+1)v}{2N}\right]
+\end{equation}
+
+\noindent where $\alpha_0 = \sqrt{1/M}$ and $\alpha_u = \sqrt{2/M}$ for $u > 0$
+(same idea for $v$).
+
+\vspace{0.15in}
+\noindent
+DCT is extremely good at summarizing almost all of an
+image's meaningful information into the top-left corner of the frequency matrix. When we ran
+DCT on a K-Means segmented image, the artificial boundaries from the clustering lit up
+the spectrum immediately. That gave us a direct way to measure how much damage the
+segmentation was doing and target those specific artefacts for removal.

@@ -1,0 +1,50 @@
+This is BibTeX, Version 0.99d (TeX Live 2023)
+Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
+The top-level auxiliary file: main.aux
+The style file: plain.bst
+Database file #1: references.bib
+Warning--I didn't find a database entry for "cooley1965"
+Warning--I didn't find a database entry for "ahmed1974"
+Warning--can't use both volume and number fields in shi2000
+You've used 7 entries,
+            2118 wiz_defined-function locations,
+            542 strings with 4757 characters,
+and the built_in function-call counts, 2075 in all, are:
+= -- 203
+> -- 73
+< -- 2
++ -- 30
+- -- 22
+* -- 126
+:= -- 342
+add.period$ -- 21
+call.type$ -- 7
+change.case$ -- 31
+chr.to.int$ -- 0
+cite$ -- 8
+duplicate$ -- 93
+empty$ -- 184
+format.name$ -- 22
+if$ -- 442
+int.to.chr$ -- 0
+int.to.str$ -- 7
+missing$ -- 11
+newline$ -- 38
+num.names$ -- 14
+pop$ -- 42
+preamble$ -- 1
+purify$ -- 25
+quote$ -- 0
+skip$ -- 63
+stack$ -- 0
+substring$ -- 118
+swap$ -- 19
+text.length$ -- 2
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 20
+warning$ -- 1
+while$ -- 21
+width$ -- 8
+write$ -- 79
+(There were 3 warnings)

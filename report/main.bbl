@@ -1,0 +1,40 @@
+\begin{thebibliography}{1}
+
+\bibitem{brigham1988}
+E.~Oran Brigham.
+\newblock {\em The Fast Fourier Transform and Its Applications}.
+\newblock Prentice Hall, 1988.
+
+\bibitem{comaniciu2002}
+Dorin Comaniciu and Peter Meer.
+\newblock Mean shift: A robust approach toward feature space analysis.
+\newblock {\em IEEE Transactions on Pattern Analysis and Machine Intelligence},
+  24(5):603--619, 2002.
+
+\bibitem{gonzalez_woods}
+Rafael~C. Gonzalez and Richard~E. Woods.
+\newblock {\em Digital Image Processing}.
+\newblock Pearson, 4th edition, 2018.
+
+\bibitem{jain_kmeans_survey}
+Anil~K. Jain.
+\newblock Data clustering: 50 years beyond k-means.
+\newblock {\em Pattern Recognition Letters}, 31(8):651--666, 2010.
+
+\bibitem{oppenheim1999}
+Alan~V. Oppenheim and Ronald~W. Schafer.
+\newblock {\em Discrete-Time Signal Processing}.
+\newblock Prentice Hall, 2nd edition, 1999.
+
+\bibitem{pratt2007}
+William~K. Pratt.
+\newblock {\em Digital Image Processing: {PIKS} Scientific Inside}.
+\newblock Wiley-Interscience, 4th edition, 2007.
+
+\bibitem{shi2000}
+Jianbo Shi and Jitendra Malik.
+\newblock Normalized cuts and image segmentation.
+\newblock In {\em IEEE Transactions on Pattern Analysis and Machine
+  Intelligence}, volume~22, pages 888--905, 2000.
+
+\end{thebibliography}
